@@ -1,0 +1,27 @@
+name: CI Build
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Validate, build and test
+        run: |
+          make config
+          make build
+          make test
+      - name: Validate Renovate configuration
+        run: make renovate-validate

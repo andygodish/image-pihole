@@ -1,0 +1,37 @@
+name: image-pihole
+
+services:
+  pihole:
+    image: ghcr.io/andygodish/pihole:v2026.10.0-0
+    pull_policy: always
+    container_name: pihole-new
+    restart: unless-stopped
+    environment:
+      TZ: "${TZ:-Etc/UTC}"
+      PIHOLE_UID: "10006"
+      PIHOLE_GID: "10006"
+      DNSMASQ_USER: pihole
+      WEBPASSWORD_FILE: pihole_password
+      FTLCONF_dns_listeningMode: all
+      FTLCONF_dns_upstreams: "${PIHOLE_UPSTREAMS:-1.1.1.1;9.9.9.9}"
+      FTLCONF_misc_dnsmasq_lines: "server=/${FREEIPA_DOMAIN:-home.arpa}/${FREEIPA_DNS_IP:-192.168.1.125}"
+      FTLCONF_dhcp_active: "false"
+      FTLCONF_ntp_ipv4_active: "false"
+      FTLCONF_ntp_ipv6_active: "false"
+      FTLCONF_ntp_sync_active: "false"
+      FTLCONF_webserver_port: "80"
+    ports:
+      - "${DNS_BIND_IP:-127.0.0.1}:${DNS_PORT:-1053}:53/tcp"
+      - "${DNS_BIND_IP:-127.0.0.1}:${DNS_PORT:-1053}:53/udp"
+      - "${WEB_BIND_IP:-127.0.0.1}:${WEB_PORT:-8080}:80/tcp"
+    volumes:
+      - pihole_data:/etc/pihole
+    secrets:
+      - pihole_password
+
+volumes:
+  pihole_data:
+
+secrets:
+  pihole_password:
+    file: ./.secrets/pihole_password

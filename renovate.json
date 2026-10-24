@@ -1,0 +1,67 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Dockerfile$/"
+      ],
+      "matchStrings": [
+        "#\\s*renovate:\\s*datasource=(?<datasource>[^\\s]+)\\s+depName=(?<depName>[^\\s]+)\\s+ARG PIHOLE_VERSION=\"(?<currentValue>[^\"]+)\""
+      ],
+      "versioningTemplate": "regex:^(?<major>\\d{4})\\.(?<minor>\\d{2})\\.(?<patch>\\d+)$",
+      "description": "Official Pi-hole Docker image pin"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/release\\.yaml$/"
+      ],
+      "matchStrings": [
+        "github\\.com/andygodish/upver/releases/download/v(?<currentValue>[^/]+)/upver-linux-amd64"
+      ],
+      "depNameTemplate": "andygodish/upver",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^docker-compose\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "image:\\s+ghcr\\.io/andygodish/pihole:(?<currentValue>[^\\s]+)"
+      ],
+      "depNameTemplate": "andygodish/image-pihole",
+      "datasourceTemplate": "github-tags",
+      "versioningTemplate": "regex:^v?(?<major>\\d{4})\\.(?<minor>\\d{2})\\.(?<patch>\\d+)-(?<build>\\d+)$",
+      "description": "Published wrapper releases, including numeric local revision"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "RENOVATE_IMAGE\\s*\\?= renovate/renovate:(?<currentValue>[^\\s]+)"
+      ],
+      "depNameTemplate": "renovate/renovate",
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
+    }
+  ],
+  "packageRules": [
+    {
+      "matchManagers": [
+        "github-actions"
+      ],
+      "groupName": "GitHub Actions dependencies"
+    }
+  ],
+  "enabledManagers": [
+    "custom.regex",
+    "github-actions"
+  ]
+}

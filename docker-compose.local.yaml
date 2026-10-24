@@ -1,0 +1,5 @@
+# Local build override; production Compose retains its versioned GHCR pin.
+services:
+  pihole:
+    image: pihole:local
+    pull_policy: never

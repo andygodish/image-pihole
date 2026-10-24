@@ -1,0 +1,12 @@
+version:
+  file: version.txt
+  pattern: '^([^[:space:]]+)[[:space:]]*$'
+  group: 1
+
+upstream:
+  file: Dockerfile
+  pattern: 'ARG PIHOLE_VERSION="([^"\n]+)"'
+  group: 1
+
+changelog:
+  file: CHANGELOG.md
