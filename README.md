@@ -329,12 +329,35 @@ Pi-hole route return 502 while the backend is unavailable. Pi-hole continues
 serving DNS without Caddy. Only trusted proxy backends should share this
 network, since members can reach each other's container ports.
 
-Keep including both `-f` files when updating the integrated deployment.
-Running plain `make up` or base-only `docker compose up -d` reconciles it back
-to standalone networking and removes the shared connection, breaking the
-proxy route. To intentionally return to standalone operation, remove the
-Pi-hole route from Caddy's local Caddyfile first, then run base-only
-`docker compose up -d` in each project. Named volumes and the external network
-are retained; do not use `down -v`.
+To keep the overlay enabled across ordinary Makefile operations, add this line
+once to each project's local `.env` (preserving existing settings):
+
+```dotenv
+COMPOSE_FILE=docker-compose.yaml:docker-compose.proxy.yaml
+```
+
+Compose reads this setting itself; the Makefiles do not source `.env` as shell
+code. Then `make config`, `make up`, `make down`, `make restart`, `make status`,
+and `make logs` use the same selection. `make up` creates `homelab-proxy` if the
+proxy overlay is selected and the network is missing. With no `COMPOSE_FILE`
+setting, ordinary startup remains standalone and creates no shared network.
+The colon separator applies on Linux/macOS.
+
+After editing `.env`, use `make down` then `make up` to recreate containers with
+the selected networks. These commands preserve named volumes. Pi-hole's port
+preflight requires it to be stopped before `make up`, and its published port 53
+may require `sudo make up`. Plan for a DNS interruption. If the Docker host
+resolves through this same Pi-hole, run `make pull` in `image-pihole` before
+stopping it. Pi-hole's `make up` uses `--pull missing`, so an already pulled
+image can start without a registry lookup while DNS is down. The named volume
+and password secret are retained.
+
+To return to standalone operation, remove the Pi-hole route from Caddy's local
+Caddyfile, remove the `COMPOSE_FILE` line in each `.env`, and recreate each
+service with `make down` / `make up`. The external network remains on the host;
+remove it separately only when no deployment uses it. Do not use `down -v`.
 
 See [Docker's cross-project networking documentation](https://docs.docker.com/compose/how-tos/networking/#connecting-multiple-compose-projects).
+
+`make up-local` explicitly selects the base and local-image override files for
+development; it does not enable the proxy overlay from `.env`.

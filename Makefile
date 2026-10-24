@@ -6,12 +6,11 @@ FULL_TAG       := $(REGISTRY)/$(IMAGE_NAME):$(VERSION_TAG)
 LATEST_TAG     := $(REGISTRY)/$(IMAGE_NAME):latest
 REPO_ROOT      := $(CURDIR)
 PLATFORMS      ?= linux/amd64,linux/arm64
-COMPOSE_FILE   := docker-compose.yaml
 RENOVATE_IMAGE ?= renovate/renovate:44.181.3
-COMPOSE        := docker compose -f $(COMPOSE_FILE)
+COMPOSE        := docker compose
 
 .DEFAULT_GOAL := help
-.PHONY: verify-env verify-release build build-multiarch config verify-runtime verify-ports fix-permissions up run up-local down stop restart logs status ps test renovate-validate renovate-dry-run help
+.PHONY: pull proxy-network verify-env verify-release build build-multiarch config verify-runtime verify-ports fix-permissions up run up-local down stop restart logs status ps test renovate-validate renovate-dry-run help
 
 verify-env:
 	@test -s version.txt || { echo "Missing version.txt"; exit 1; }
@@ -37,14 +36,14 @@ verify-ports: verify-runtime
 fix-permissions:
 	@echo "Upstream initializes named-volume ownership and runs FTL as pihole (10006:10006)."
 
-up: verify-ports fix-permissions
-	$(COMPOSE) up -d --pull always
+up: proxy-network verify-ports fix-permissions
+	$(COMPOSE) up -d --pull missing
 
 run: up
 
 # Use the image built by make build without requiring an initial GHCR release.
 up-local: build verify-ports fix-permissions
-	$(COMPOSE) -f docker-compose.local.yaml up -d --pull never
+	$(COMPOSE) -f docker-compose.yaml -f docker-compose.local.yaml up -d --pull never
 
 stop down:
 	$(COMPOSE) down
@@ -77,3 +76,13 @@ help:
 	@echo "test                    Check the built image's binary and runtime defaults"
 	@echo "renovate-validate       Validate dependency automation configuration"
 	@echo "renovate-dry-run        Inspect Renovate dependency extraction locally"
+
+# Compose reads COMPOSE_FILE from .env; standalone users need no proxy network.
+proxy-network: config
+	@if $(COMPOSE) config --networks | grep -qx proxy; then \
+		docker network inspect homelab-proxy >/dev/null 2>&1 || docker network create homelab-proxy; \
+	fi
+
+# Fetch updates while DNS is available, before stopping this DNS server.
+pull: config
+	$(COMPOSE) pull

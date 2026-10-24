@@ -5,7 +5,7 @@ import socket
 import subprocess
 
 config = json.loads(subprocess.check_output(
-    ["docker", "compose", "-f", "docker-compose.yaml", "config", "--format", "json"], text=True))
+    ["docker", "compose", "config", "--format", "json"], text=True))
 service = config["services"]["pihole"]
 # Do not permit an unrelated container with a matching name to bypass checks.
 inspection = subprocess.run(["docker", "inspect", service["container_name"]],
