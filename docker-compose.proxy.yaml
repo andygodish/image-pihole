@@ -1,0 +1,12 @@
+# Optional same-host reverse proxy integration. Base Compose runs standalone.
+# Create homelab-proxy once, then include this file explicitly with -f.
+services:
+  pihole:
+    networks:
+      - default
+      - proxy
+
+networks:
+  proxy:
+    external: true
+    name: homelab-proxy

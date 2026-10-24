@@ -256,3 +256,85 @@ References:
 - [v6 DNS configuration](https://docs.pi-hole.net/ftldns/configfile/)
 - [v5-to-v6 migration](https://docs.pi-hole.net/docker/upgrading/v5-v6/)
 - [Upstream startup and privilege dropping](https://github.com/pi-hole/docker-pi-hole/blob/2026.10.0/src/start.sh)
+
+## Optional browser access through Caddy
+
+For `https://pihole.home.arpa/admin/`, add the local A record
+`pihole.home.arpa -> 192.168.1.202`. With their `docker-compose.proxy.yaml` overlays enabled, Pi-hole and
+`image-caddy` join the same external Docker network, `homelab-proxy`, on the
+`.202` host. Create that network once before starting this optional integration:
+
+```sh
+docker network inspect homelab-proxy >/dev/null 2>&1 || docker network create homelab-proxy
+```
+
+The Caddy route is `reverse_proxy pihole-new:80` with `tls internal` in its
+local Caddyfile. See the [image-caddy integration guide](https://github.com/andygodish/image-caddy#optional-pi-hole-integration-on-the-same-docker-host) for the route, validation and
+application steps. Update both repositories before enabling this route.
+Enable the optional network with:
+
+```sh
+docker compose -f docker-compose.yaml -f docker-compose.proxy.yaml config --quiet
+docker compose -f docker-compose.yaml -f docker-compose.proxy.yaml up -d --no-deps pihole
+```
+
+Use the corresponding overlay in `image-caddy` too. A restart alone does not
+attach an existing container to the new network. Recreating the
+container briefly interrupts DNS and preserves the named data volume and secret.
+No image rebuild is required.
+
+The admin host binding stays on `127.0.0.1:8080`; the SSH tunnel remains an
+optional recovery path. Normal access uses Caddy's existing LAN ports 80/443.
+Devices need working LAN DNS and trust in Caddy's local CA. The work Mac's
+managed DNS remains a separate unresolved issue. Caddy can continue serving its
+other routes when Pi-hole is stopped; Pi-hole can run independently of Caddy
+as long as the external network exists. Neither project removes that network
+when brought down. DNS bindings and FreeIPA forwarding are unchanged.
+
+### Why an optional shared network?
+
+The base `docker-compose.yaml` runs this service independently. Ordinary
+`docker compose up -d` or `make up` does not require `homelab-proxy`, a sibling
+repository, or the other container. Image builds and image runtime defaults do
+not depend on this network. Pi-hole's existing FreeIPA DNS defaults are a
+separate homelab setting, documented above.
+
+Each Compose project normally has its own private default bridge. A container
+on one project's default bridge cannot discover the other project's service
+through Docker DNS. Also, `127.0.0.1` inside Caddy refers to Caddy itself, not
+the Docker host or Pi-hole. The optional shared bridge gives Caddy a stable
+Docker name, `pihole-new`, through which it can reach Pi-hole's internal HTTP
+port 80. No fixed container IP or additional LAN web port is needed.
+
+This bridge exists only inside one Docker host. It is not a UniFi VLAN, a LAN
+DNS zone, or a replacement for Pi-hole's DNS service. Browser requests still
+resolve `pihole.home.arpa` to the host's LAN IP and connect to Caddy on 443.
+Caddy then makes a separate HTTP request over the bridge to Pi-hole. DNS
+queries from LAN clients still use Pi-hole's published host port 53. The
+`.202` address and `pihole.home.arpa` name describe this homelab, not required
+values for another developer.
+
+The overlay is optional because another deployment may run only one service,
+use another reverse proxy, or put the services on different machines. For
+separate machines, configure a reachable, appropriately protected backend
+address instead; this single-host bridge cannot connect them. A standalone
+Pi-hole installation can use its published admin port, and standalone Caddy
+can proxy any configured reachable backend.
+
+When this integration is enabled, create `homelab-proxy` once on the Docker
+host. `external: true` means the operator owns its lifecycle: neither Compose
+project creates or deletes it. The services have no cross-project startup
+ordering or `depends_on`. Caddy starts without Pi-hole, but requests to the
+Pi-hole route return 502 while the backend is unavailable. Pi-hole continues
+serving DNS without Caddy. Only trusted proxy backends should share this
+network, since members can reach each other's container ports.
+
+Keep including both `-f` files when updating the integrated deployment.
+Running plain `make up` or base-only `docker compose up -d` reconciles it back
+to standalone networking and removes the shared connection, breaking the
+proxy route. To intentionally return to standalone operation, remove the
+Pi-hole route from Caddy's local Caddyfile first, then run base-only
+`docker compose up -d` in each project. Named volumes and the external network
+are retained; do not use `down -v`.
+
+See [Docker's cross-project networking documentation](https://docs.docker.com/compose/how-tos/networking/#connecting-multiple-compose-projects).
