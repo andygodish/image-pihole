@@ -7,7 +7,7 @@ LATEST_TAG     := $(REGISTRY)/$(IMAGE_NAME):latest
 REPO_ROOT      := $(CURDIR)
 PLATFORMS      ?= linux/amd64,linux/arm64
 COMPOSE_FILE   := docker-compose.yaml
-RENOVATE_IMAGE ?= renovate/renovate:44.181.1
+RENOVATE_IMAGE ?= renovate/renovate:44.181.3
 COMPOSE        := docker compose -f $(COMPOSE_FILE)
 
 .DEFAULT_GOAL := help
