@@ -65,7 +65,12 @@ make up-local
 make status
 ```
 
-The upstream healthcheck should become healthy. On that Docker host:
+The upstream healthcheck should become healthy. If a production port preflight
+reports `Permission denied` for port 53, run `sudo make up` on the Docker host:
+the current preflight tests port binding directly and therefore needs permission
+to bind privileged ports. This error alone does not mean the port is occupied.
+
+On that Docker host:
 
 ```sh
 dig @127.0.0.1 -p 1053 _kerberos._udp.home.arpa SRV +short
@@ -75,6 +80,16 @@ curl -I http://127.0.0.1:8080/admin/
 
 Expect `freeipa.home.arpa.` port 88, public DNS answers, and a web response.
 On a remote host, use an SSH tunnel for the loopback-bound admin interface.
+For the current Docker host (`192.168.1.202`), run on the Mac:
+
+```sh
+ssh -o IdentitiesOnly=yes -i ~/.ssh/id_ecdsa -N -L 18080:127.0.0.1:8080 ubuntu@192.168.1.202
+```
+
+Keep that terminal open and visit `http://127.0.0.1:18080/admin/`. Log in with
+the password saved in `.secrets/pihole_password`. The operator confirmed login
+through this tunnel succeeded.
+
 `make test` is a binary/defaults check; live DNS and web behavior require these
 separate operator checks. To change ports on a running stack, use `make down`,
 edit `.env`, then start it again. `make restart` does not apply Compose changes.
@@ -91,6 +106,64 @@ Compose injects this v6 dnsmasq line via `FTLCONF_misc_dnsmasq_lines`:
 ```ini
 server=/home.arpa/192.168.1.125
 ```
+
+Compose also sets `FTLCONF_dns_domain_name` to `FREEIPA_DOMAIN` and
+`FTLCONF_dns_domain_local` to `false`. These settings allow Pi-hole v6 to
+forward the domain instead of generating the conflicting `local=/home.arpa/`
+rule. The domain-specific server rule above keeps those queries directed to
+FreeIPA. All three settings are required for this fresh-deployment setup.
+
+The first runtime check returned `NXDOMAIN` despite the correct forwarding
+rule and a successful direct FreeIPA query. The operator set
+`dns.domain.name=home.arpa` and `dns.domain.local=false` through the FTL CLI,
+then restarted Pi-hole. Those manual settings persist in that named volume;
+Compose now supplies them for new volumes too. The post-fix query through
+Pi-hole returned `0 100 88 freeipa.home.arpa.`, confirming Kerberos SRV
+discovery through the domain-specific forwarder. The external query through
+Pi-hole returned `172.66.147.243` and `104.20.23.154`; Compose reported the
+container healthy. Admin login through the SSH tunnel passed. The operator
+chose to recreate required DNS records instead of importing the old deployment.
+They added `freeipa.home.arpa -> 192.168.1.125` through Settings > Local DNS
+Records, and the reverse query through Pi-hole returned `freeipa.home.arpa.`.
+The operator changed `.env` to `DNS_BIND_IP=192.168.1.202` and `DNS_PORT=53`,
+then recreated the container with the same named volume. The Python preflight
+could not bind privileged port 53 as the ordinary Ubuntu user; `sudo make up`
+completed the check and started the service. From the Mac, both Kerberos SRV
+and external A queries to `192.168.1.202:53` passed. FreeIPA still forwards
+external queries to the old `.14` at that checkpoint. The operator subsequently
+changed FreeIPA's per-server forwarder to `.202` (policy `only`) and verified
+public A resolution through FreeIPA. UniFi LAN DHCP now advertises only `.202`;
+both old DNS addresses were removed. The Mac received `.202` after DHCP renewal.
+
+Direct A queries from the Mac to Pi-hole return `192.168.1.125`. Native macOS
+lookups still fail for `freeipa.home.arpa`, while external names resolve. Cache
+clearing did not help; the failed native lookup did not appear in the Pi-hole
+query log. Inspection identified a managed DNS-over-HTTPS profile on the work
+Mac. This is the leading explanation, not a confirmed traffic trace. No managed
+profile was modified. Confirm normal resolution on an unmanaged client and
+coordinate any local-domain DNS exception with the profile owner.
+
+During comparison testing, the operator temporarily recreated `uds.dev` and
+`sso.uds.dev` records from the old resolver, then identified possible company
+use of `uds.dev` and removed both records from the new Pi-hole. No `uds.dev`
+record or wildcard is part of the intended deployment. Leave company-domain
+configuration unchanged; FreeIPA continues to use `home.arpa`. Any future
+homelab Kubernetes domain migration is a separate task, including ingress and
+application configuration. The Docker VM's own resolver initially retained `.14`, `.11`, `1.1.1.1` and
+`8.8.8.8` in merged installer Netplan files. The operator removed saved
+nameservers from both `50-cloud-init.yaml` and `00-installer-config.yaml`,
+corrected the former's permissions to 0600, and confirmed `netplan try`.
+`resolvectl status ens18` then showed only `.202`; a normal system lookup with
+`getent ahostsv4 freeipa.home.arpa` returned `192.168.1.125`.
+`getent ahostsv4 example.com` also returned the expected public addresses,
+confirming native external resolution after the Netplan repair. The managed
+work Mac's native-resolution issue remains separate and unresolved.
+
+The Ubuntu template had disabled cloud-init networking. Source fixes in
+`packer-ubuntu-2604` remove that disable file and installer Netplan settings at
+cleanup; `tofu-proxmox` now explicitly supplies Ubuntu DHCP and optional DNS
+settings. These source fixes have been validated but not rebuilt/applied to
+infrastructure. Existing VM configuration was repaired manually as above.
 
 Only `home.arpa` goes to FreeIPA. External queries use `PIHOLE_UPSTREAMS`.
 Never set FreeIPA as the global upstream while FreeIPA forwards external queries
