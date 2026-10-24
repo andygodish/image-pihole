@@ -2,7 +2,7 @@ name: image-pihole
 
 services:
   pihole:
-    image: ghcr.io/andygodish/pihole:v2026.10.0-1
+    image: ghcr.io/andygodish/pihole:v2026.10.0-3
     pull_policy: always
     container_name: pihole-new
     restart: unless-stopped
