@@ -1,3 +1,7 @@
+## 2026.10.0-3 - 2026-10-24
+
+- [b505eb8](https://github.com/andygodish/image-pihole/commit/b505eb8eb878af6bf0fcbcc6826c3da52cb63778) feat: persist proxy integration through standard Make commands
+
 ## 2026.10.0-2 - 2026-10-24
 
 - [99098e2](https://github.com/andygodish/image-pihole/commit/99098e290953a2286e21de6d0687c4f33cf2a21a) chore(deps): update renovate/renovate docker tag to v44.181.3 (#6)
