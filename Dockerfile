@@ -1,5 +1,5 @@
 # renovate: datasource=docker depName=pihole/pihole
-ARG PIHOLE_VERSION="2026.10.0"
+ARG PIHOLE_VERSION="2026.10.1"
 FROM pihole/pihole:${PIHOLE_VERSION}
 
 LABEL org.opencontainers.image.title="Homelab Pi-hole"
