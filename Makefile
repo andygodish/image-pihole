@@ -6,7 +6,7 @@ FULL_TAG       := $(REGISTRY)/$(IMAGE_NAME):$(VERSION_TAG)
 LATEST_TAG     := $(REGISTRY)/$(IMAGE_NAME):latest
 REPO_ROOT      := $(CURDIR)
 PLATFORMS      ?= linux/amd64,linux/arm64
-RENOVATE_IMAGE ?= renovate/renovate:44.181.3
+RENOVATE_IMAGE ?= renovate/renovate:44.198.3
 COMPOSE        := docker compose
 
 .DEFAULT_GOAL := help
