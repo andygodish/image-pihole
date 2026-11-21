@@ -1,3 +1,8 @@
+## 2026.11.0-0 - 2026-11-21
+
+- [e1b33de](https://github.com/andygodish/image-pihole/commit/e1b33de37d92dbda84703a23ff4e85a2e288ed96) chore(deps): update renovate/renovate docker tag to v44.257.9 (#9)
+- [bccd0b9](https://github.com/andygodish/image-pihole/commit/bccd0b9d1ff06526a0947b3e629633b844ee2a20) chore(deps): update pihole/pihole docker tag to v2026.11.0 (#10)
+
 ## 2026.10.0-3 - 2026-10-24
 
 - [b505eb8](https://github.com/andygodish/image-pihole/commit/b505eb8eb878af6bf0fcbcc6826c3da52cb63778) feat: persist proxy integration through standard Make commands
