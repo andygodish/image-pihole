@@ -91,8 +91,20 @@ the password saved in `.secrets/pihole_password`. The operator confirmed login
 through this tunnel succeeded.
 
 `make test` is a binary/defaults check; live DNS and web behavior require these
-separate operator checks. To change ports on a running stack, use `make down`,
-edit `.env`, then start it again. `make restart` does not apply Compose changes.
+separate operator checks. After changing ports or other settings in `.env`, use
+`sudo make restart`. It validates Compose and the password secret, prepares the
+optional proxy network, and recreates only Pi-hole with the current configuration.
+It also restarts Pi-hole when no settings changed. The named volume is preserved;
+DNS briefly pauses while the container is replaced, but no full stack teardown
+is needed. Compose honors the `COMPOSE_FILE` selection in `.env`.
+
+Restart uses `--pull never`, so run `make pull` first when changing the image tag.
+If the selected image is not cached, restart fails rather than fetching it during
+the operation. The bind preflight used by `make up` is skipped during restart
+because the running container owns its ports; Docker checks replacement bindings.
+A conflicting new binding can still prevent startup and requires correcting the
+configuration and retrying. For a process-only restart without applying configuration
+changes, use `docker compose restart pihole` directly.
 
 After publishing the initial release, `make up` uses the pinned GHCR tag.
 After the first upver release is merged, `make build-multiarch` publishes both
@@ -278,8 +290,9 @@ docker compose -f docker-compose.yaml -f docker-compose.proxy.yaml config --quie
 docker compose -f docker-compose.yaml -f docker-compose.proxy.yaml up -d --no-deps pihole
 ```
 
-Use the corresponding overlay in `image-caddy` too. A restart alone does not
-attach an existing container to the new network. Recreating the
+Use the corresponding overlay in `image-caddy` too. `docker compose restart`
+alone does not attach an existing container to the new network; `make restart`
+recreates Pi-hole using the overlays selected in `.env`. Recreating the
 container briefly interrupts DNS and preserves the named data volume and secret.
 No image rebuild is required.
 
@@ -338,23 +351,21 @@ COMPOSE_FILE=docker-compose.yaml:docker-compose.proxy.yaml
 
 Compose reads this setting itself; the Makefiles do not source `.env` as shell
 code. Then `make config`, `make up`, `make down`, `make restart`, `make status`,
-and `make logs` use the same selection. `make up` creates `homelab-proxy` if the
+and `make logs` use the same selection. `make up` and `make restart` create `homelab-proxy` if the
 proxy overlay is selected and the network is missing. With no `COMPOSE_FILE`
 setting, ordinary startup remains standalone and creates no shared network.
 The colon separator applies on Linux/macOS.
 
-After editing `.env`, use `make down` then `make up` to recreate containers with
-the selected networks. These commands preserve named volumes. Pi-hole's port
-preflight requires it to be stopped before `make up`, and its published port 53
-may require `sudo make up`. Plan for a DNS interruption. If the Docker host
-resolves through this same Pi-hole, run `make pull` in `image-pihole` before
-stopping it. Pi-hole's `make up` uses `--pull missing`, so an already pulled
-image can start without a registry lookup while DNS is down. The named volume
-and password secret are retained.
+After editing Pi-hole's `.env`, use `sudo make restart` to recreate it with the
+selected networks while preserving the named volume and password secret. Plan
+for a brief DNS interruption. If changing the image tag, run `make pull` first
+while DNS is available; restart uses only the cached image. For initial startup,
+`make up` uses `--pull missing`, and its privileged-port preflight may require
+`sudo make up`. Apply Caddy's configuration through its own repository workflow.
 
 To return to standalone operation, remove the Pi-hole route from Caddy's local
 Caddyfile, remove the `COMPOSE_FILE` line in each `.env`, and recreate each
-service with `make down` / `make up`. The external network remains on the host;
+service through its repository workflow (`make restart` for Pi-hole). The external network remains on the host;
 remove it separately only when no deployment uses it. Do not use `down -v`.
 
 See [Docker's cross-project networking documentation](https://docs.docker.com/compose/how-tos/networking/#connecting-multiple-compose-projects).

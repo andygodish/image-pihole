@@ -48,8 +48,10 @@ up-local: build verify-ports fix-permissions
 stop down:
 	$(COMPOSE) down
 
-restart:
-	$(COMPOSE) restart
+# Apply .env/Compose changes without tearing down the project's networks.
+# Recreate even when unchanged so this remains a real restart; pull beforehand.
+restart: proxy-network verify-runtime fix-permissions
+	$(COMPOSE) up -d --no-deps --pull never --force-recreate pihole
 
 logs:
 	$(COMPOSE) logs -f --tail=100
@@ -72,7 +74,8 @@ help:
 	@echo "config                  Validate Compose without starting services"
 	@echo "up / up-local           Start published / locally built image"
 	@echo "down / stop             Stop containers, preserving named volumes"
-	@echo "restart / logs / status  Operate the Compose stack"
+	@echo "restart                 Recreate Pi-hole with current config and cached image"
+	@echo "logs / status           Inspect the Compose stack"
 	@echo "test                    Check the built image's binary and runtime defaults"
 	@echo "renovate-validate       Validate dependency automation configuration"
 	@echo "renovate-dry-run        Inspect Renovate dependency extraction locally"

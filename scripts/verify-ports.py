@@ -16,7 +16,7 @@ if inspection.returncode == 0:
     if labels.get("com.docker.compose.project") != config["name"]:
         raise SystemExit("Container name is already used by another deployment.")
     if container["State"]["Running"]:
-        raise SystemExit("Stack is already running. Use make down before changing published ports, or make restart.")
+        raise SystemExit("Stack is already running. Use make restart to apply configuration changes.")
 for port in service["ports"]:
     address = port.get("host_ip", "0.0.0.0")
     family = socket.AF_INET6 if ":" in address else socket.AF_INET
