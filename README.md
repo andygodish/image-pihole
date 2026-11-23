@@ -376,35 +376,63 @@ development; it does not enable the proxy overlay from `.env`.
 ## Nightly backup
 
 The host-side backup in `scripts/backup.py` does not change the container image.
-The current deployment defaults are the checkout
-`/home/pi/src/github.com/andygodish/image-pihole`, container `pihole-new`, volume
-`image-pihole_pihole_data`, and QNAP export
-`192.168.1.55:/pihole.home.arpa` mounted at `/mnt/pihole-backups`.
+Deployment settings live in an ignored local `backup.json`, created from the
+tracked `backup.example.json` template. The script has no built-in container,
+volume, checkout, or NAS source values. Missing or invalid settings fail before
+Docker is stopped.
 Dependencies are Python 3, Docker, GNU tar/coreutils, Git, `dig` (`dnsutils`),
 and the existing NFS client/mount configuration. Docker must use its local
 daemon; a remote Docker context is unsupported.
 
-The NFS automount is configured in Wayne's `/etc/fstab`:
+Configure the NFS automount in the host's `/etc/fstab`, substituting your export
+and mount path. For example:
 
 ```fstab
-192.168.1.55:/pihole.home.arpa /mnt/pihole-backups nfs rw,nosuid,nodev,noexec,_netdev,nofail,x-systemd.automount,x-systemd.mount-timeout=30s 0 0
+nas.example.net:/pihole-backups /mnt/pihole-backups nfs rw,nosuid,nodev,noexec,_netdev,nofail,x-systemd.automount,x-systemd.mount-timeout=30s 0 0
 ```
 
 ### Install and check without interrupting DNS
 
-From the checkout on Wayne:
+From the checkout on the Docker host:
 
 ```bash
+cp backup.example.json backup.json
+chmod 600 backup.json
+# Edit every setting for this host before continuing.
+${EDITOR:-vi} backup.json
 sudo make backup-check
 sudo make backup-install
 sudo /usr/local/sbin/pihole-backup --check
 systemd-analyze calendar '*-*-* 03:00:00 America/Denver'
 ```
 
+The JSON file contains six required string fields:
+
+| Field | Meaning |
+| --- | --- |
+| `container` | Existing Pi-hole container to stop and start |
+| `volume` | Expected Docker volume mounted at `/etc/pihole` |
+| `source` | Exact NFS export reported by `findmnt`; retains the wrong-mount safeguard |
+| `repo` | Absolute checkout path containing `.env` and `.secrets` |
+| `destination` | Absolute NFS mount point where completed sets are written |
+| `staging` | Absolute private local staging path, outside the NAS mount |
+
 The check reads deployment metadata, checks UDP and TCP resolution, probes NAS
 write access, and checks free space. It does not stop or restart Pi-hole.
-Installation copies the script and units into root-owned system paths; it
-does not enable the timer. Re-run installation after updating these files.
+Installation copies the script and units into root-owned system paths and
+copies `backup.json` to root-owned `/etc/pihole-backup.json` with mode 0600.
+The installed service reads that copy. Direct script invocation defaults to
+that path; use `--config /absolute/path/backup.json` to select another file.
+Installation does not enable the timer. Re-run installation after updating
+the script, units, or local settings; an existing local config is not replaced
+by a Git pull. The manifest records the effective backup settings for recovery.
+
+For existing installations upgrading from the earlier hardcoded script, create
+and edit `backup.json`, run `sudo make backup-check`, reinstall, and check the
+installed copy before the next scheduled backup. There is no DNS interruption
+for installation or check-only runs. Keep the original working settings when
+performing this migration. The template is an example, not a deployable NAS
+configuration.
 
 After checks pass, enable the nightly schedule:
 
@@ -479,7 +507,7 @@ and matching checksums establish transfer integrity, not recoverability.
 
 Before calling this a verified recovery solution:
 
-- Restrict the NAS export and share ACLs to Wayne and backup administrators;
+- Restrict the NAS export and share ACLs to the DNS host and backup administrators;
   archives contain plaintext secrets. NFS transport does not itself provide
   encrypted backup storage. Choose NAS encryption/snapshot protection as needed.
 - Exercise a restore into an empty, separate volume on an isolated test instance,
