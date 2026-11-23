@@ -372,3 +372,129 @@ See [Docker's cross-project networking documentation](https://docs.docker.com/co
 
 `make up-local` explicitly selects the base and local-image override files for
 development; it does not enable the proxy overlay from `.env`.
+
+## Nightly backup
+
+The host-side backup in `scripts/backup.py` does not change the container image.
+The current deployment defaults are the checkout
+`/home/pi/src/github.com/andygodish/image-pihole`, container `pihole-new`, volume
+`image-pihole_pihole_data`, and QNAP export
+`192.168.1.55:/pihole.home.arpa` mounted at `/mnt/pihole-backups`.
+Dependencies are Python 3, Docker, GNU tar/coreutils, Git, `dig` (`dnsutils`),
+and the existing NFS client/mount configuration. Docker must use its local
+daemon; a remote Docker context is unsupported.
+
+The NFS automount is configured in Wayne's `/etc/fstab`:
+
+```fstab
+192.168.1.55:/pihole.home.arpa /mnt/pihole-backups nfs rw,nosuid,nodev,noexec,_netdev,nofail,x-systemd.automount,x-systemd.mount-timeout=30s 0 0
+```
+
+### Install and check without interrupting DNS
+
+From the checkout on Wayne:
+
+```bash
+sudo make backup-check
+sudo make backup-install
+sudo /usr/local/sbin/pihole-backup --check
+systemd-analyze calendar '*-*-* 03:00:00 America/Denver'
+```
+
+The check reads deployment metadata, checks UDP and TCP resolution, probes NAS
+write access, and checks free space. It does not stop or restart Pi-hole.
+Installation copies the script and units into root-owned system paths; it
+does not enable the timer. Re-run installation after updating these files.
+
+After checks pass, enable the nightly schedule:
+
+```bash
+sudo systemctl enable --now pihole-backup.timer
+systemctl list-timers --all pihole-backup.timer
+```
+
+This starts the timer, not a backup immediately. The explicit time zone follows
+Denver daylight saving time. `Persistent=false` deliberately skips missed
+runs instead of catching up during daytime. A skipped or failed daily run can
+exceed the desired 24-hour RPO; external monitoring remains necessary.
+See [systemd timer semantics](https://manpages.debian.org/trixie/systemd/systemd.timer.5.en.html).
+
+### Capture and verification
+
+The job requires an already-running Pi-hole, validates the exact NFS source
+and mount type, and acquires a lock to prevent overlapping backup jobs. It
+records the Git commit, dirty-worktree status, running image reference, image
+ID and available registry digests. A dirty checkout is recorded, not backed
+up: push the intended deployment revision to Git before relying on recovery.
+Avoid concurrent deployment changes while a backup runs.
+
+It archives `.env` and `.secrets`, stops Pi-hole with a 30-second grace period,
+and creates an uncompressed local volume archive under `/var/lib/pihole-backup`.
+The archive operation has a five-minute timeout; size and storage performance
+determine actual downtime. A forced-kill exit is rejected. A `finally` handler
+attempts to restart the existing container even if stopping or archiving fails.
+Graceful termination also runs that handler; power loss or SIGKILL cannot.
+The script never removes or recreates the volume and never pulls an image.
+
+After restart, UDP and TCP DNS checks must pass. Compression, archive listing,
+and all NAS transfer operations occur after restart. A successful set is stored
+directly under `<destination>/<UTC-timestamp>-<unique-suffix>/`, for example
+`/mnt/pihole-backups/20261123T100000Z-abcdefgh/`. There is no hostname directory;
+the originating hostname is recorded in `manifest.json`:
+
+- `pihole-data.tar.gz`: the stopped `/etc/pihole` volume, with numeric ownership,
+  permissions, ACLs and extended attributes preserved by GNU tar.
+- `config.tar.gz`: `.env` and `.secrets`, including the password file.
+- `manifest.json`: deployment references and elapsed stop-through-DNS-check time.
+- `SHA256SUMS`: checksums for the three files above.
+
+Each copied file is flushed and read back for checksum verification before the
+remote `.partial` directory is renamed into a completed set. Local staging is
+deleted only after successful publication. Failed staging and remote partial
+sets remain for investigation. No prior backups are deleted automatically.
+Because this is a hard NFS mount, NAS I/O may block beyond the initial mount
+timeout. The service has no overall timeout; a blocked transfer keeps the
+backup lock, with Pi-hole already restarted. A NAS failure during preflight
+leaves DNS running.
+
+During a maintenance window, run the first real backup and inspect it:
+
+```bash
+sudo systemctl start --no-block pihole-backup.service
+sudo journalctl -fu pihole-backup.service
+```
+
+Ctrl-C exits the journal viewer, not the backup. After completion:
+
+```bash
+systemctl status pihole-backup.service --no-pager
+sudo journalctl -u pihole-backup.service -n 60 --no-pager
+```
+
+A successful oneshot service returns to `inactive (dead)` with exit status 0.
+Verify `sha256sum -c SHA256SUMS` inside the completed NAS set. Listing an archive
+and matching checksums establish transfer integrity, not recoverability.
+
+### Remaining DR work
+
+Before calling this a verified recovery solution:
+
+- Restrict the NAS export and share ACLs to Wayne and backup administrators;
+  archives contain plaintext secrets. NFS transport does not itself provide
+  encrypted backup storage. Choose NAS encryption/snapshot protection as needed.
+- Exercise a restore into an empty, separate volume on an isolated test instance,
+  with the recorded Git revision/image and restored configuration. Preserve
+  numeric ownership when extracting as root. Never merge a restore into the
+  production volume. Test UDP/TCP DNS, local records, filtering and admin access,
+  and measure recovery time (RTO).
+- Add external alerts for failed/stale backups, missing scheduled runs, low
+  space, and DNS recovery failures. Currently failures are visible only through
+  service exit status and the journal; no email/webhook is configured.
+- Implement and verify the proposed 7 daily / 4 weekly / 3 monthly retention
+  policy. Until then all completed and failed sets are retained; monitor space.
+- Provision the second independent resolver, then implement one-way shared
+  configuration replication separately. No replication is implemented here.
+
+Run `make backup-test` for isolated safety tests; they do not contact Docker or
+the NAS. Production validation still requires the check, first overnight backup,
+and isolated restore exercise above.

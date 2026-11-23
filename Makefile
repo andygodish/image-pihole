@@ -10,7 +10,7 @@ RENOVATE_IMAGE ?= renovate/renovate:44.257.9
 COMPOSE        := docker compose
 
 .DEFAULT_GOAL := help
-.PHONY: pull proxy-network verify-env verify-release build build-multiarch config verify-runtime verify-ports fix-permissions up run up-local down stop restart logs status ps test renovate-validate renovate-dry-run help
+.PHONY: pull proxy-network verify-env verify-release build build-multiarch config verify-runtime verify-ports fix-permissions up run up-local down stop restart logs status ps test backup-check backup-install backup-test renovate-validate renovate-dry-run help
 
 verify-env:
 	@test -s version.txt || { echo "Missing version.txt"; exit 1; }
@@ -59,6 +59,18 @@ logs:
 status ps:
 	$(COMPOSE) ps
 
+# Host-side backup installation is explicit and never enables the timer.
+backup-install:
+	install -m 0755 -o root -g root scripts/backup.py /usr/local/sbin/pihole-backup
+	install -m 0644 -o root -g root systemd/pihole-backup.service systemd/pihole-backup.timer /etc/systemd/system/
+	systemctl daemon-reload
+
+backup-check:
+	python3 scripts/backup.py --check --repo "$(REPO_ROOT)"
+
+backup-test:
+	python3 scripts/test_backup.py
+
 # Checks the binary and runtime defaults without starting the service or publishing ports.
 test: verify-env
 	docker run --rm --network none --entrypoint /bin/bash $(IMAGE_NAME):$(VERSION_TAG) -ec 'pihole-FTL --version; test "$$PIHOLE_UID" = 10006; test "$$DNSMASQ_USER" = pihole'
@@ -76,6 +88,9 @@ help:
 	@echo "down / stop             Stop containers, preserving named volumes"
 	@echo "restart                 Recreate Pi-hole with current config and cached image"
 	@echo "logs / status           Inspect the Compose stack"
+	@echo "backup-check            Check backup prerequisites without stopping DNS (sudo)"
+	@echo "backup-install          Install backup script/units; timer stays disabled (sudo)"
+	@echo "backup-test             Run backup safety checks without Docker/NAS access"
 	@echo "test                    Check the built image's binary and runtime defaults"
 	@echo "renovate-validate       Validate dependency automation configuration"
 	@echo "renovate-dry-run        Inspect Renovate dependency extraction locally"

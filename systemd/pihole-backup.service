@@ -1,0 +1,13 @@
+[Unit]
+Description=Back up Pi-hole to NFS storage
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/pihole-backup
+# Do not kill a transfer blocked on a hard NFS mount. Pi-hole has already
+# restarted before transfer; a stuck job also holds the overlap lock.
+TimeoutStartSec=infinity
+UMask=0077
+Nice=10
