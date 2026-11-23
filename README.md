@@ -373,10 +373,10 @@ See [Docker's cross-project networking documentation](https://docs.docker.com/co
 `make up-local` explicitly selects the base and local-image override files for
 development; it does not enable the proxy overlay from `.env`.
 
-## Wayne nightly backup
+## Nightly backup
 
-The host-side backup in `scripts/backup.py` is specific to Wayne. It does not
-change the container image. Its defaults match the deployed checkout
+The host-side backup in `scripts/backup.py` does not change the container image.
+The current deployment defaults are the checkout
 `/home/pi/src/github.com/andygodish/image-pihole`, container `pihole-new`, volume
 `image-pihole_pihole_data`, and QNAP export
 `192.168.1.55:/pihole.home.arpa` mounted at `/mnt/pihole-backups`.
@@ -438,7 +438,9 @@ The script never removes or recreates the volume and never pulls an image.
 
 After restart, UDP and TCP DNS checks must pass. Compression, archive listing,
 and all NAS transfer operations occur after restart. A successful set is stored
-under `/mnt/pihole-backups/wayne/<UTC-timestamp>-<unique-suffix>/`:
+directly under `<destination>/<UTC-timestamp>-<unique-suffix>/`, for example
+`/mnt/pihole-backups/20261123T100000Z-abcdefgh/`. There is no hostname directory;
+the originating hostname is recorded in `manifest.json`:
 
 - `pihole-data.tar.gz`: the stopped `/etc/pihole` volume, with numeric ownership,
   permissions, ACLs and extended attributes preserved by GNU tar.

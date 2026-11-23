@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Wayne's stopped-volume backup. Run --check before enabling the timer."""
+"""Pi-hole stopped-volume backup. Run --check before enabling the timer."""
 
 import argparse
 import datetime
@@ -66,7 +66,7 @@ def preflight(repo, destination, staging):
     # Both probes happen before any Docker stop operation.
     for directory in (staging, destination):
         with tempfile.TemporaryFile(dir=directory) as probe:
-            probe.write(b"Wayne backup write test\n")
+            probe.write(b"Pi-hole backup write test\n")
             probe.flush()
             os.fsync(probe.fileno())
     size = int(run("du", "-sb", str(volume_path)).split()[0])
@@ -131,8 +131,7 @@ def digest(path):
 
 def publish(local, destination):
     check_mount(destination)
-    remote = destination / "wayne"
-    remote.mkdir(mode=0o700, exist_ok=True)
+    remote = destination
     partial = remote / ("." + local.name + ".partial")
     partial.mkdir(mode=0o700)
     # Incomplete transfers remain visibly .partial, never a completed set.

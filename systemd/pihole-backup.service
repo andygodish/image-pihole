@@ -1,5 +1,5 @@
 [Unit]
-Description=Back up Wayne Pi-hole to QNAP
+Description=Back up Pi-hole to NFS storage
 After=docker.service network-online.target
 Wants=network-online.target
 

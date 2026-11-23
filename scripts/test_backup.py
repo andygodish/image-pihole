@@ -110,6 +110,7 @@ class BackupTests(unittest.TestCase):
             destination.mkdir()
             with patch.object(backup, "check_mount"):
                 final = backup.publish(local, destination)
+            self.assertEqual(final, destination / local.name)
             self.assertEqual((final / "config.tar.gz").read_bytes(), b"test fixture")
             self.assertFalse((final.parent / ".recovery-set.partial").exists())
 
@@ -124,7 +125,7 @@ class BackupTests(unittest.TestCase):
                     patch.object(backup, "digest", side_effect=["a", "b"]):
                 with self.assertRaises(RuntimeError):
                     backup.publish(local, destination)
-            self.assertFalse((destination / "wayne" / "recovery-set").exists())
+            self.assertFalse((destination / "recovery-set").exists())
             self.assertTrue(local.exists())
 
 
