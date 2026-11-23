@@ -16,6 +16,13 @@ spec.loader.exec_module(backup)
 
 
 class BackupTests(unittest.TestCase):
+    def test_git_metadata_disables_index_refresh(self):
+        with patch.object(backup, "run", return_value="") as run:
+            backup.git(Path("/checkout"), "status", "--porcelain")
+        self.assertEqual(run.call_args.args,
+                         ("git", "--no-optional-locks", "-c", "safe.directory=/checkout",
+                          "-C", "/checkout", "status", "--porcelain"))
+
     def test_check_mode_never_captures_backup(self):
         with tempfile.TemporaryDirectory() as temp, \
                 patch.object(backup.sys, "argv", ["backup", "--check", "--staging", temp]), \

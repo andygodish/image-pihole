@@ -32,8 +32,9 @@ def inspect():
 
 
 def git(repo, *args):
-    # The installed systemd job runs as root; the checkout belongs to pi.
-    return run("git", "-c", f"safe.directory={repo}", "-C", str(repo), *args)
+    # Root must not refresh/replace the checkout owner's index during status.
+    return run("git", "--no-optional-locks", "-c", f"safe.directory={repo}",
+               "-C", str(repo), *args)
 
 
 def check_mount(destination):
