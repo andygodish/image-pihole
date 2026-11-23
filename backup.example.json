@@ -1,8 +1,0 @@
-{
-  "container": "pihole-new",
-  "volume": "image-pihole_pihole_data",
-  "source": "nas.example.net:/pihole-backups",
-  "repo": "/srv/image-pihole",
-  "destination": "/mnt/pihole-backups",
-  "staging": "/var/lib/pihole-backup"
-}

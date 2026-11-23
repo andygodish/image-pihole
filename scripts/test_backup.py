@@ -21,6 +21,48 @@ CONTAINER = "test-pihole"
 
 
 class BackupTests(unittest.TestCase):
+    def test_env_reads_only_backup_fields_without_execution(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / ".env"
+            marker = Path(temp) / "must-not-exist"
+            path.write_text(
+                f"UNRELATED=$(touch {marker})\n"
+                "BACKUP_CONTAINER='test-pihole' # selected container\n"
+                "BACKUP_VOLUME=test-volume\n"
+                "BACKUP_SOURCE=nas.example.net:/backups\n"
+                "BACKUP_DESTINATION='/mnt/backup share'\n"
+                "export BACKUP_STAGING=/var/lib/pihole-backup\n")
+            config = backup.load_env(path)
+            self.assertEqual(config.repo, path.parent)
+            self.assertEqual(config.destination, Path("/mnt/backup share"))
+            self.assertEqual(config.container, "test-pihole")
+            self.assertFalse(marker.exists())
+
+    def test_env_rejects_missing_duplicate_and_unknown_settings(self):
+        template = Path(__file__).parents[1] / ".env.example"
+        text = template.read_text()
+        for invalid in ("", text + "\nBACKUP_VOLUME=duplicate\n",
+                        text + "\nBACKUP_TYPO=invalid\n",
+                        text.replace("BACKUP_STAGING=/var/lib/pihole-backup", "BACKUP_STAGING=")):
+            with tempfile.TemporaryDirectory() as temp:
+                path = Path(temp) / ".env"
+                path.write_text(invalid)
+                with self.assertRaises(ValueError):
+                    backup.load_env(path)
+
+    def test_installed_snapshot_contains_no_unrelated_env_or_secrets(self):
+        with tempfile.TemporaryDirectory() as temp:
+            env = Path(temp) / ".env"
+            template = Path(__file__).parents[1] / ".env.example"
+            env.write_text(template.read_text() + "\nUNRELATED_SECRET=not-for-installed-config\n")
+            config = backup.load_env(env)
+            installed = Path(temp) / "installed.json"
+            backup.write_config(installed, config)
+            self.assertEqual(backup.load_config(installed), config)
+            self.assertEqual(installed.stat().st_mode & 0o777, 0o600)
+            self.assertNotIn("UNRELATED_SECRET", installed.read_text())
+            self.assertNotIn("not-for-installed-config", installed.read_text())
+
     def test_loads_deployment_settings(self):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "backup.json"

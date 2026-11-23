@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import shutil
 import signal
+import shlex
 import socket
 import subprocess
 import sys
@@ -18,8 +19,7 @@ import tempfile
 import time
 
 
-def load_config(path):
-    values = json.loads(path.read_text())
+def validate_config(values):
     required = {"container", "volume", "source", "repo", "destination", "staging"}
     if not isinstance(values, dict) or set(values) != required:
         raise ValueError("Backup config must contain exactly: " + ", ".join(sorted(required)))
@@ -30,6 +30,53 @@ def load_config(path):
         if not values[key].is_absolute():
             raise ValueError(f"Backup config {key} must be an absolute path")
     return argparse.Namespace(**values)
+
+
+def load_config(path):
+    return validate_config(json.loads(path.read_text()))
+
+
+def load_env(path):
+    """Read literal BACKUP_ values only; never source/execute the Compose env."""
+    fields = {"BACKUP_CONTAINER": "container", "BACKUP_VOLUME": "volume",
+              "BACKUP_SOURCE": "source", "BACKUP_DESTINATION": "destination",
+              "BACKUP_STAGING": "staging"}
+    values = {"repo": str(path.resolve().parent)}
+    seen = set()
+    for number, line in enumerate(path.read_text().splitlines(), 1):
+        line = line.strip()
+        if line.startswith("export "):
+            line = line[7:].lstrip()
+        key, separator, value = line.partition("=")
+        key = key.strip()
+        if not key.startswith("BACKUP_"):
+            continue
+        if not separator or key not in fields or key in seen:
+            raise ValueError(f"Invalid, unknown, or duplicate backup setting on line {number}")
+        # Shell-style quoting is accepted as data. There is no interpolation,
+        # command substitution, or dependency on the invoking shell environment.
+        words = shlex.split(value, comments=True)
+        if len(words) != 1:
+            raise ValueError(f"Expected one literal value for {key} on line {number}")
+        values[fields[key]] = words[0]
+        seen.add(key)
+    return validate_config(values)
+
+
+def write_config(path, config):
+    # Publish a complete root-only settings snapshot for the scheduled job.
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as stream:
+            temporary = Path(stream.name)
+            json.dump({key: str(value) for key, value in vars(config).items()}, stream, indent=2)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.replace(path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def run(*args, timeout=60):
@@ -198,13 +245,23 @@ def backup(config, state, volume_path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="Check prerequisites without stopping Pi-hole")
-    parser.add_argument("--config", type=Path, default=Path("/etc/pihole-backup.json"),
+    sources = parser.add_mutually_exclusive_group()
+    sources.add_argument("--config", type=Path, default=Path("/etc/pihole-backup.json"),
                         help="Deployment settings (default: /etc/pihole-backup.json)")
+    sources.add_argument("--env-file", type=Path, help="Read BACKUP_ settings from checkout .env")
+    parser.add_argument("--write-config", type=Path,
+                        help="Install settings snapshot from --env-file, without running a backup")
     args = parser.parse_args()
     if os.geteuid() != 0:
         parser.error("Run with sudo")
-    config = load_config(args.config)
+    if args.write_config and not args.env_file:
+        parser.error("--write-config requires --env-file")
+    config = load_env(args.env_file) if args.env_file else load_config(args.config)
     os.umask(0o077)
+    if args.write_config:
+        write_config(args.write_config, config)
+        print(f"Installed backup settings: {args.write_config}", flush=True)
+        return
     config.staging.mkdir(mode=0o700, parents=True, exist_ok=True)
     config.staging.chmod(0o700)
     with (config.staging / ".lock").open("a") as lock:
