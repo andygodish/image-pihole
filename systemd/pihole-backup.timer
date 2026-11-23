@@ -1,0 +1,12 @@
+[Unit]
+Description=Nightly Pi-hole backup at 03:00 Denver time
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 America/Denver
+AccuracySec=1min
+# Avoid an unexpected daytime DNS interruption after a missed backup.
+Persistent=false
+RandomizedDelaySec=0
+
+[Install]
+WantedBy=timers.target
