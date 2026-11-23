@@ -61,12 +61,13 @@ status ps:
 
 # Host-side backup installation is explicit and never enables the timer.
 backup-install:
+	python3 scripts/backup.py --env-file "$(REPO_ROOT)/.env" --write-config /etc/pihole-backup.json
 	install -m 0755 -o root -g root scripts/backup.py /usr/local/sbin/pihole-backup
 	install -m 0644 -o root -g root systemd/pihole-backup.service systemd/pihole-backup.timer /etc/systemd/system/
 	systemctl daemon-reload
 
 backup-check:
-	python3 scripts/backup.py --check --repo "$(REPO_ROOT)"
+	python3 scripts/backup.py --check --env-file "$(REPO_ROOT)/.env"
 
 backup-test:
 	python3 scripts/test_backup.py

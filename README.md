@@ -376,35 +376,73 @@ development; it does not enable the proxy overlay from `.env`.
 ## Nightly backup
 
 The host-side backup in `scripts/backup.py` does not change the container image.
-The current deployment defaults are the checkout
-`/home/pi/src/github.com/andygodish/image-pihole`, container `pihole-new`, volume
-`image-pihole_pihole_data`, and QNAP export
-`192.168.1.55:/pihole.home.arpa` mounted at `/mnt/pihole-backups`.
+Deployment settings live in the ignored local `.env`, alongside the Compose
+settings. The tracked `.env.example` includes a generic `BACKUP_` block.
+The script has no built-in container,
+volume, checkout, or NAS source values. Missing or invalid settings fail before
+Docker is stopped.
 Dependencies are Python 3, Docker, GNU tar/coreutils, Git, `dig` (`dnsutils`),
 and the existing NFS client/mount configuration. Docker must use its local
 daemon; a remote Docker context is unsupported.
 
-The NFS automount is configured in Wayne's `/etc/fstab`:
+Configure the NFS automount in the host's `/etc/fstab`, substituting your export
+and mount path. For example:
 
 ```fstab
-192.168.1.55:/pihole.home.arpa /mnt/pihole-backups nfs rw,nosuid,nodev,noexec,_netdev,nofail,x-systemd.automount,x-systemd.mount-timeout=30s 0 0
+nas.example.net:/pihole-backups /mnt/pihole-backups nfs rw,nosuid,nodev,noexec,_netdev,nofail,x-systemd.automount,x-systemd.mount-timeout=30s 0 0
 ```
 
 ### Install and check without interrupting DNS
 
-From the checkout on Wayne:
+From the checkout on the Docker host:
 
 ```bash
+# Add/adapt the BACKUP_ block from .env.example in the EXISTING .env.
+# Do not overwrite the deployment's existing settings or password secret.
+${EDITOR:-vi} .env
 sudo make backup-check
 sudo make backup-install
 sudo /usr/local/sbin/pihole-backup --check
 systemd-analyze calendar '*-*-* 03:00:00 America/Denver'
 ```
 
+Five literal settings are required in `.env`:
+
+| Field | Meaning |
+| --- | --- |
+| `BACKUP_CONTAINER` | Existing Pi-hole container to stop and start |
+| `BACKUP_VOLUME` | Expected Docker volume mounted at `/etc/pihole` |
+| `BACKUP_SOURCE` | Exact NFS export reported by `findmnt`; retains the wrong-mount safeguard |
+| `BACKUP_DESTINATION` | Absolute NFS mount point where completed sets are written |
+| `BACKUP_STAGING` | Absolute private local staging path, outside the NAS mount |
+
+The checkout path is derived from the `.env` location. The backup parser reads
+only these variables as data, supporting single/double quotes and inline
+comments. It does not execute the file, expand variables/commands, or support
+multiline backup values. Unknown/duplicate `BACKUP_` keys and missing/empty
+settings fail validation. Unrelated Compose settings are ignored by this parser.
+
 The check reads deployment metadata, checks UDP and TCP resolution, probes NAS
 write access, and checks free space. It does not stop or restart Pi-hole.
-Installation copies the script and units into root-owned system paths; it
-does not enable the timer. Re-run installation after updating these files.
+Installation copies the script and units into root-owned system paths and
+generates root-owned `/etc/pihole-backup.json` with mode 0600 from the five
+backup variables and inferred checkout path. This installed JSON is generated
+state, not another file to maintain; it excludes unrelated `.env` settings.
+The installed service reads that snapshot. Direct script invocation defaults
+to that path; use `--env-file /absolute/path/.env` to read local settings instead.
+Installation does not enable the timer. Re-run installation after updating
+the script, units, or local settings; the existing `.env` is not replaced
+by a Git pull. The manifest records the effective backup settings for recovery.
+
+For existing installations upgrading from the earlier hardcoded or manually
+configured JSON script, add the five variables to `.env`, run
+`sudo make backup-check`, reinstall, and check the
+installed copy before the next scheduled backup. There is no DNS interruption
+for installation or check-only runs. Keep the original working settings when
+performing this migration. The example NFS source must be replaced with your
+actual export. A legacy checkout `backup.json` is no longer used by the Makefile
+and remains ignored by Git. Existing timers need no re-enabling. The schedule
+remains in the timer unit; the template uses Denver time.
 
 After checks pass, enable the nightly schedule:
 
@@ -479,7 +517,7 @@ and matching checksums establish transfer integrity, not recoverability.
 
 Before calling this a verified recovery solution:
 
-- Restrict the NAS export and share ACLs to Wayne and backup administrators;
+- Restrict the NAS export and share ACLs to the DNS host and backup administrators;
   archives contain plaintext secrets. NFS transport does not itself provide
   encrypted backup storage. Choose NAS encryption/snapshot protection as needed.
 - Exercise a restore into an empty, separate volume on an isolated test instance,

@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/sbin/pihole-backup
+ExecStart=/usr/local/sbin/pihole-backup --config /etc/pihole-backup.json
 # Do not kill a transfer blocked on a hard NFS mount. Pi-hole has already
 # restarted before transfer; a stuck job also holds the overlap lock.
 TimeoutStartSec=infinity
