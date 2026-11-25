@@ -13,10 +13,11 @@ services:
       DNSMASQ_USER: pihole
       WEBPASSWORD_FILE: pihole_password
       FTLCONF_dns_listeningMode: all
-      FTLCONF_dns_domain_name: "${FREEIPA_DOMAIN:-home.arpa}"
-      FTLCONF_dns_domain_local: "false"
+      FTLCONF_dns_domain_name: "${DNS_DOMAIN:-home.arpa}"
+      FTLCONF_dns_domain_local: "true"
       FTLCONF_dns_upstreams: "${PIHOLE_UPSTREAMS:-1.1.1.1;9.9.9.9}"
-      FTLCONF_misc_dnsmasq_lines: "server=/${FREEIPA_DOMAIN:-home.arpa}/${FREEIPA_DNS_IP:-192.168.1.125}"
+      # Explicitly clear the legacy domain-forwarding rule persisted in /etc/pihole.
+      FTLCONF_misc_dnsmasq_lines: ""
       FTLCONF_dhcp_active: "false"
       FTLCONF_ntp_ipv4_active: "false"
       FTLCONF_ntp_ipv6_active: "false"

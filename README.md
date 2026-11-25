@@ -27,7 +27,7 @@ ARG is the base image version; `version.txt` identifies this wrapper's release.
   LAN exposure and the eventual replacement address must be chosen at cutover.
 - Credentials come from an ignored local file through a Compose secret.
   Local Compose secrets are file mounts, not an encrypted secret store.
-- DNS providers and FreeIPA addressing belong in Compose/.env, not the image.
+- DNS providers and the local DNS domain belong in Compose/.env, not the image.
 
 ## Prepare and validate
 
@@ -111,9 +111,36 @@ After the first upver release is merged, `make build-multiarch` publishes both
 the version tag and `latest`; it is an
 explicit publishing action, separate from normal local builds.
 
-## DNS and FreeIPA
+## Local DNS
 
-Compose injects this v6 dnsmasq line via `FTLCONF_misc_dnsmasq_lines`:
+Compose treats `DNS_DOMAIN` (default `home.arpa`) as local to Pi-hole, with
+`FTLCONF_dns_domain_local=true`. Configure the local A and CNAME records in
+Pi-hole. External queries use `PIHOLE_UPSTREAMS`. No FreeIPA forwarder is enabled.
+
+`FTLCONF_misc_dnsmasq_lines` is explicitly empty to clear the old
+`server=/home.arpa/192.168.1.125` rule from persisted configuration. This setting
+manages the entire custom dnsmasq-lines list; review it before adding other custom
+rules. Existing local records, the data volume and the password secret are kept.
+Older `FREEIPA_DOMAIN` and `FREEIPA_DNS_IP` entries in `.env` are no longer used;
+replace them with `DNS_DOMAIN=home.arpa`.
+
+Apply this Compose change with `make config` followed by `make restart`.
+Recreation briefly interrupts DNS. No image rebuild or volume replacement is
+needed. Validate public DNS and local A/AAAA/HTTPS responses afterward. The
+FreeIPA VM itself is unchanged; integrated FreeIPA records are no longer
+automatically discovered through the previous domain forwarder.
+
+Environment-managed v6 settings are read-only in the web UI. Imported custom
+configuration or separately configured conditional forwarders should also be
+reviewed if forwarding persists.
+
+### Historical FreeIPA integration (disabled)
+
+The following records the earlier setup and troubleshooting, not the current
+deployment instructions. References to `.14`, `.202` and FreeIPA forwarding
+describe historical checkpoints.
+
+Compose previously injected this v6 dnsmasq line via `FTLCONF_misc_dnsmasq_lines`:
 
 ```ini
 server=/home.arpa/192.168.1.125
@@ -188,7 +215,10 @@ Compose and recreate the service to change them. There is no custom dnsmasq
 file mount required for a fresh deployment. Review any imported `local=`,
 `address=`, conditional-forwarding or local-zone settings for conflicts.
 
-## Migration and rollback: not performed yet
+## Historical v5 migration and rollback plan
+
+This section preserves the original migration plan and its old addresses.
+It is not the current Wayne deployment or recovery procedure.
 
 The existing service is Pi-hole v5.18.2 / FTL v5.25.1 / Web v5.21, Docker tag
 2024.03.2, on `192.168.1.14`. `.11` is retired. FreeIPA uses `.14` for external
@@ -302,15 +332,15 @@ Devices need working LAN DNS and trust in Caddy's local CA. The work Mac's
 managed DNS remains a separate unresolved issue. Caddy can continue serving its
 other routes when Pi-hole is stopped; Pi-hole can run independently of Caddy
 as long as the external network exists. Neither project removes that network
-when brought down. DNS bindings and FreeIPA forwarding are unchanged.
+when brought down. The overlay does not change DNS bindings or forwarding policy.
 
 ### Why an optional shared network?
 
 The base `docker-compose.yaml` runs this service independently. Ordinary
 `docker compose up -d` or `make up` does not require `homelab-proxy`, a sibling
 repository, or the other container. Image builds and image runtime defaults do
-not depend on this network. Pi-hole's existing FreeIPA DNS defaults are a
-separate homelab setting, documented above.
+not depend on this network. The local DNS domain and upstream policy are
+configured separately, as documented above.
 
 Each Compose project normally has its own private default bridge. A container
 on one project's default bridge cannot discover the other project's service
